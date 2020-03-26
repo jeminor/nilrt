@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+
+import sys, os
+import subprocess as sp
+import re
+
+# must be between 131 - 255, to avoid reservations
+class CONTAINER_EXIT_CODES():
+    OK = 200
+    RECOVERY = 201
+
+from argparse import ArgumentParser
+parser = ArgumentParser()
+parser.add_argument('uid', type=int)
+parser.add_argument('gid', type=int)
+parser.add_argument('bash_args', nargs='*', default=['bash'], action='store')
+parser.add_argument('--builder-name', nargs='?', default='builder')
+parser.add_argument('-v', '--verbose', action='store_true')
+args = parser.parse_args()
+
+
+# GATE: do not run script outside of container #
+################################################
+
+def is_container_environment():
+    re_docker_cgroup=re.compile(r'1:name=.*:/docker/\w+')
+    with open('/proc/1/cgroup', 'r') as fp_init_cgroup:
+        for line in fp_init_cgroup.readlines():
+            if re_docker_cgroup.match(line):
+                return True
+        return False
+
+if not is_container_environment():
+    print('ERROR: not running in a container environment. Exiting.')
+    sys.exit(1)
+
+# ENDGATE #
+
+def create_build_user(name, uid, gid):
+    print('Creating build user %s (%d:%d).' % (name, uid, gid))
+    sp.check_output('groupadd --gid %d %s' % (args.gid, args.builder_name),
+                    shell=True)
+    # Create build user with the specified uid/gid, add them to sudoers
+    sp.check_output('useradd  \
+                        --uid %d --gid %d \
+                        --groups sudo \
+                        --shell /bin/bash \
+                        --create-home --home-dir /home/%s \
+                        %s' % (args.uid, args.gid, args.builder_name,
+                               args.builder_name), shell=True)
+    sp.check_output('echo "%s ALL=(#0:#0) NOPASSWD: ALL" \
+                     >/etc/sudoers.d/builder' % (name), shell=True)
+
+    # Write a bash function 'exit_container', which wraps exiting with the
+    # special container exit code.
+    exit_container="""
+function exit_container() {
+    exit %d
+}
+
+export -f exit_container""" % CONTAINER_EXIT_CODES.OK
+    sp.check_output('echo "%s" >/etc/profile.d/func_exit_container.sh' % exit_container, shell=True)
+    print('Successfully created build user.')
+
+def enter_build_shell(builder_name):
+    run_rc=True  # if true, run the bash rcfiles
+    while True:
+        # Enter the build user shell environment
+        if run_rc is True:
+            print("""
+=====
+You are entering the NILRT docker build container.
+You are a non-root user with sudo privileges within this container.
+Use the bash function: "exit_container" to exit the build environment.
+""")
+            bash_args = '-i -l'
+        else:
+            print("""\
+=====
+Entering recovery mode. Build-env scripts will NOT run in this mode.
+Exit code 200 to actually exit the container.
+""")
+            bash_args = '--rcfile /etc/profile -i'
+
+        proc = sp.Popen('sudo -u %s /bin/bash %s' % (
+                            builder_name, bash_args),
+                         shell=True)
+        proc.communicate()
+    
+        # Restart bash if the error code was 0, to keep the container alive if
+        # the users accidently ctrl+Ds or similar.
+        # Else if there was an error, restart in recovery mode.
+        # Only truely exit if the code is the special container exit code
+        run_rc=True
+        try:
+            print('Bash exited code %d' % proc.returncode)
+            if proc.returncode == CONTAINER_EXIT_CODES.OK:
+                break
+            elif proc.returncode == CONTAINER_EXIT_CODES.RECOVERY:
+                run_rc=False
+            elif proc.returncode == 0:
+                print("""\
+Restarting to keep container alive.
+If you really want to quit the container environment,
+run bash function: "exit_container" or otherwise exit code %d.""")
+            else:
+                run_rc=False
+                continue
+        except (NameError, AttributeError):
+            pass
+
+def run_init_build_env_scripts(*args):
+    script_args = ' '.join(['--arg="%s"' % arg for arg in args])
+    try:
+        scripts_stdout = sp.check_output('run-parts --verbose --exit-on-error %s -- /etc/init.container.d' % script_args, stderr=sp.STDOUT, shell=True)
+    except sp.CalledProcessError as e:
+        print(e.output.decode('utf-8', errors='replace'))
+        raise e
+    else:
+        print(scripts_stdout.decode('utf-8', errors='replace'))
+
+
+# MAIN #
+########
+
+create_build_user(args.builder_name, args.uid, args.gid)
+run_init_build_env_scripts()
+enter_build_shell(args.builder_name)
+
+
+sys.exit(0)

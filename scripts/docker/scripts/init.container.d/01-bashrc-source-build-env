@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+set -x
+
+BUILDER_HOME=$(getent passwd "$NILRT_UID" | cut -d: -f6)
+cat >>"${BUILDER_HOME}/.bashrc" <<EOF
+
+if [ -d "$NILRT_DIR_INIT_BUILD" ]; then
+	for script in "$NILRT_DIR_INIT_BUILD"/*; do
+		source \$script
+	done
+fi
+EOF

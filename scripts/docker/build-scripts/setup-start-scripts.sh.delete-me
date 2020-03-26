@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# This script installs virtualbox 6.0 on Debian stretch docker images.
+set -xeuo pipefail
+
+DIR_CONTAINER=/etc/init.container.d
+DIR_BUILD_ENV=/etc/init.build-env.d
+#CONTAINER_BLOCK='##CONTAINER BLOCK'
+#CONTAINER_BLOCK_END='##END CONTAINER BLOCK'
+
+function install_traps() {
+	cat >${1}/00-trap-on <<EOF
+#!/usr/bin/env bash
+
+trap "exit 201" ERR
+
+set -E  # needed to properly consume failures from within functions
+EOF
+	cat >${1}/99-trap-off <<EOF
+#!/usr/bin/env bash
+
+trap - ERR
+
+set +E
+EOF
+}
+
+mkdir -v $DIR_CONTAINER
+mkdir -v $DIR_BUILD_ENV
+
+install_traps $DIR_CONTAINER
+install_traps $DIR_BUILD_ENV
+
+cat >$DIR_CONTAINER/01-bashrc-source-build-env <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+set -x
+
+BUILDER_HOME=\$(getent passwd "\$NILRT_UID" | cut -d: -f6)
+cat >>"\${BUILDER_HOME}/.bashrc" <<EOF2
+
+if [ -d "$DIR_BUILD_ENV" ]; then
+	for script in "$DIR_BUILD_ENV"/*; do
+		source \\\$script
+	done
+fi
+EOF2
+EOF
+
+chmod -Rv ug+x "$DIR_CONTAINER"
+chmod -Rv ug+x "$DIR_BUILD_ENV"

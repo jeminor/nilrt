@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+#
+# See usage() below.
+#
+# This script does not necessarily support all branches of the nilrt.git repo.
+set -euo pipefail
+
+function usage()
+{
+	cat <<EOF
+$(basename $0) \\
+[-h] [--uid=builder_uid] [--gid=builder_gid] [--branch branch_ref]
+[--remote remote_uri] [--build-name name] [root]
+
+This script configures a nilrt.git workspace to point to a requested branch
+ref. If the workspace already exists, it checks out the requested branch and
+initializes it, including all subdirectories.
+
+Opts:
+-b|--branch branch_ref    The ref spec of the upstream branch to checkout
+                              (default: master)
+-f|--force                If asserted, change ownership to match uid/gid and
+                          ignore unclean git statuses when performing
+                          operations.
+-g|--gid builder_gid      The owner gid of the NILRT workspace
+                              (default: current gid)
+-n|--build-name name      The name suffix to the \`build-\` directory.
+-r|--remote remote_uri    The remote repo URI.
+                              (default: https://github.com/ni/nilrt.git)
+-u|--uid builder_uid      The owner uid of the NILRT workspace
+                              (default: current uid)
+
+Positional:
+root  Path to where the NILRT workspace is/should-be cloned (default:
+      /tmp/nilrt.git)
+
+Envioronmental:
+NILRT_BRANCH -> --branch
+NILRT_GIT -> --gid
+NILRT_REMOTE -> --remote
+NILRT_ROOT -> root
+NILRT_UID -> --uid
+NILRT_CONTAINER_NAME -> --build-name
+EOF
+	exit ${1:-2}
+}
+
+# TODO: remove
+env | grep '^NILRT_*'
+
+## ARG PARSING ##
+# Defaults
+opt_POSITIONAL=()
+opt_branch=${NILRT_BRANCH:-master}
+opt_build_name=${NILRT_CONTAINER_NAME:-}
+opt_force=false
+opt_gid=${NILRT_GID:-`id -g`}
+opt_remote=${NILRT_REMOTE:-https://github.com/ni/nilrt.git}
+opt_root=${NILRT_ROOT:-/tmp/nilrt.git}
+opt_uid=${NILRT_UID:-`id -u`}
+
+# Options
+while [ $# -gt 0 ]; do
+	case $1 in
+		-h|--help)
+			usage 0
+			;;
+		-b|--branch)
+			shift && opt_branch=$1
+			shift
+			;;
+		-f|--force)
+			opt_force=true
+			shift
+			;;
+		-g|--gid)
+			shift && opt_gid=$1
+			shift
+			;;
+		-r|--remote)
+			shift && opt_remote=$1
+			shift
+			;;
+		-u|--uid)
+			shift && opt_uid=$1
+			shift
+			;;
+		-d|--build-name)
+			shift && opt_build_name=$1
+			shift
+			;;
+		-*|--*)
+			usage 1
+			;;
+		*)
+			opt_POSITIONAL+=($1)
+			shift
+			;;
+	esac
+done
+# Positional arguments
+if [ -n "${opt_POSITIONAL[0]:-}" ]; then
+	opt_root="${opt_POSITIONAL[0]}"
+fi
+
+
+## MAIN ##
+
+function init_workspace (){
+	# Create workspace if it does not already exist.
+	install --mode=0755 --owner=$opt_uid --group=$opt_gid -d "$opt_root"
+
+	cd "$opt_root"
+
+	# is this an extant git repo?
+	local extant=false
+	git rev-parse --git-dir 2>/dev/null 1>&2 && extant=true
+
+	local git_remote_name=""
+	if $extant; then
+		# check for a remote which matches the required URL
+		for remote in $(git remote); do
+			echo "checking remote $remote"
+			url="$(git remote get-url ${remote})"
+			if [ "$url" = "${opt_remote}" ]; then
+				git_remote_name=$remote
+				break
+			fi
+		done
+	else
+		git init -q .
+	fi
+
+	# setup the remotes
+	if [ -n "${git_remote_name}" ]; then
+		echo "Using extant remote ${git_remote_name}."
+	else
+		git_remote_name=${NILRT_REMOTE_NAME:-origin}
+		echo "Creating remote $git_remote_name : ${opt_remote}."
+		git remote add --fetch --tags $git_remote_name ${opt_remote} 2>/dev/null
+	fi
+
+	# Determine the name of the local branch ref
+	local local_branch_name=${opt_branch}
+	if [ -n "${opt_build_name}" ]; then
+		local_branch_name="${opt_build_name}/${local_branch_name}"
+	fi
+
+	git checkout ${local_branch_name} || \
+	git checkout --force -b ${local_branch_name} ${git_remote_name}/${opt_branch}
+
+	git submodule update --init --remote --checkout
+	git submodule foreach <<EOF
+if [ git show-ref --verify --quiet refs/heads/${local_branch_name} ]; then
+	git checkout ${local_branch_name}
+else
+	git checkout -b ${local_branch_name} HEAD
+fi
+EOF
+}
+
+# Add a .git/info/exclude entry for the glob param
+# @: globs to exclude
+function git_exclude_glob() {
+	for glob in ${@}; do
+		grep_glob=$(sed 's/\([\*\.]\)/\\\1/g' <<<$glob)
+		echo git_exclude_glob $grep_glob
+		[ $(grep -q -e \'^$grep_glob$\' ./.git/info/exclude) ] || \
+			echo $glob >>./.git/info/exclude
+	done
+}
+
+function enter_workspace () {
+	export MACHINE=${NILRT_MACHINE:-x64}
+	if [ -n "${opt_build_name}" ]; then
+		local build_dir=build-${opt_build_name}
+	fi
+	if [ -e "./ni-oe-init-build-env" ]; then
+		source ./ni-oe-init-build-env ${build_dir:-}
+	else
+		echo "ERROR: Could not find init environment; this branch of nilrt.git is not supported."
+		exit 1
+	fi
+}
+
+init_workspace
+enter_workspace

@@ -1,0 +1,147 @@
+## LAYER base OS
+FROM debian:9.11 as os-base
+
+RUN rm /bin/sh && ln -s /bin/bash /bin/sh
+SHELL ["/bin/bash", "-c"]
+
+# Enable contributor package sources
+ENV DEBIAN_FRONTEND=noninteractive
+RUN sed -i 's/stretch main/stretch main contrib/' /etc/apt/sources.list
+RUN apt-get update && apt-get install --assume-yes apt-utils
+
+# General build niceties
+RUN apt-get update && apt-get install --assume-yes \
+	binutils \
+	bvi \
+	bzip2 \
+	coreutils \
+	git \
+	python3 \
+	rsync \
+	strace \
+	sudo \
+	tree \
+	unzip \
+	vim \
+	wget \
+	xz-utils \
+	zip \
+""
+
+# Install nibuild dependencies
+RUN dpkg --add-architecture i386
+RUN apt-get update && apt-get install --assume-yes \
+	libc6-i686:i386 \
+	libperl5.24:i386 \
+	libstdc++6:i386 \
+""
+RUN apt-get update && apt-get install --assume-yes \
+	build-essential \
+	ccache \
+	chrpath \
+	cvs \
+	desktop-file-utils \
+	diffstat \
+	g++ \
+	gawk \
+	help2man \
+	info \
+	libpulse-dev \
+	pkg-config \
+	subversion \
+	texi2html \
+	texinfo \
+	xmlstarlet \
+""
+
+# Install UTF-8 locales
+RUN apt-get update && apt-get install --assume-yes locales
+RUN dpkg-reconfigure -f noninteractive locales
+RUN echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && locale-gen en_US.UTF-8
+RUN update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8'
+
+
+## LAYER build env
+FROM os-base as nilrt-build
+
+# Install OE dependencies
+RUN apt-get update && apt-get install --assume-yes \
+	bc \
+	ccache \
+	chrpath \
+	cpio \
+	cvs \
+	desktop-file-utils \
+	diffstat \
+	gawk \
+	gcc-multilib \
+	gdb \
+	genisoimage \
+	git-core \
+	gnupg2 \
+	help2man \
+	info \
+	iputils-ping \
+	libc6-dbg \
+	libguestfs0-dbg \
+	libguestfs-tools \
+	libpulse-dev \
+	libsdl1.2-dev \
+	linux-image-amd64 \
+	pigz \
+	pkg-config \
+	python \
+	python-pexpect \
+	qemu-kvm \
+	qemu-system-x86 \
+	qemu-utils \
+	socat \
+	strace \
+	subversion \
+	texi2html \
+	texinfo \
+	uuid-runtime \
+	xmlstarlet \
+""
+
+# Install virtualbox from upstream because it's not available in debian 9
+COPY build-scripts/install-vbox_stretch.sh /tmp/install-vbox_stretch.sh
+RUN  /tmp/install-vbox_stretch.sh
+
+# Install the perforce cli binary
+COPY build-scripts/install-p4-cli.sh /tmp/install-p4-cli.sh
+RUN  /tmp/install-p4-cli.sh
+
+# Cleanup image of unneeded packages to reduce size
+RUN apt-get autoremove --yes && apt-get clean --yes
+RUN rm -rf \
+	/tmp/* \
+	/var/cache/apt/*.bin \
+	/var/cache/apt/archives/*.deb \
+	/var/cache/apt/archives/partial/*.deb \
+	/var/lib/apt/lists/* \
+	/var/tmp/* \
+""
+
+
+## LAYER nilrt-build-interactive
+# Setup for interactive development
+FROM nilrt-build as nilrt-build-interactive
+ENV DEBIAN_FRONTEND=
+ENV NILRT_DIR_INIT_BUILD=/etc/init.build-env.d
+ENV NILRT_DIR_INIT_CONTAINER=/etc/init.container.d
+
+# Create a runparts dir for scripts to run at container start
+COPY build-scripts/trap-on  ${NILRT_DIR_INIT_BUILD}/00-trap-on
+COPY build-scripts/trap-on  ${NILRT_DIR_INIT_CONTAINER}/00-trap-on
+COPY build-scripts/trap-off ${NILRT_DIR_INIT_BUILD}/99-trap-off
+COPY build-scripts/trap-off ${NILRT_DIR_INIT_CONTAINER}/99-trap-off
+
+COPY scripts/init.container.d/01-bashrc-source-build-env ${NILRT_DIR_INIT_CONTAINER}/01-bashrc-source-build-env
+COPY scripts/init.container.d/02-inject-container-args   ${NILRT_DIR_INIT_CONTAINER}/02-inject-container-args
+
+# special container init file
+COPY scripts/init.container /etc/init.container
+ENTRYPOINT ["/etc/init.container"]
+CMD ["1000", "1000"]

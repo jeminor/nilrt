@@ -1,0 +1,42 @@
+# vi: set syntax=yaml expandtab ts=2:
+#
+# config:
+#   conatiner-start-scripts:
+#     # scripts to copy into /etc/init.build-env.d, which will execute on
+#     # container start.
+#     - path/to/script
+#
+#   builder:
+#     uid: numeric uid of the build user (defaults to the uid of the caller)
+#     gid: numeric gid of the build user (defaults to the gid of the caller)
+#     groups:
+#       # additional permission groups to give the build user
+#        - group_name|gid
+#   bashrc: path to a custom bashrc for the build user
+#
+#   nilrt_workspace 
+#
+#   workspaces:  # local workspaces to be 
+#     # build workspaces to be created. If not specified, none will be created.
+#     nilrt:
+#       src: path/to/nilrt/root (host)
+#       dst: path/to/nilrt/root (container)  # default: ~/nilrt
+#       create: True|False  # create if source does not exist
+#     perforce:
+#       src: path/to/perforce/root (host)
+#       dst: path/to/perforce/root (container)  # default: ~/perforce
+#       create: True|False  # create if source does not exist
+#     penguin:
+#       src: path/to/penguin/root (host)
+#       dst: path/to/penguin/root (container)  # default: ~/penguin
+#       create: True|False  # create if source does not exist
+#     
+---
+config:
+  build-env-scripts:
+    #- ../scripts/init-scripts/init-nilrt-git-env
+  container-start-scripts:
+    - ../scripts/init-scripts/test
+  image:
+    name: nilrt-build
+    tag:  latest

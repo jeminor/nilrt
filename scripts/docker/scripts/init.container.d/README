@@ -1,0 +1,39 @@
+# init.container.d
+
+This directory contains scripts intended to be mounted and executed by the
+nilrt build container at container-start time, before the login shell.
+
+When you start the nilrt build container, you should ``--mount`` scripts from
+this directory to the location ``/etc/init.container.d`` within the container.
+
+Scripts in that location will be executed by ``run-parts``, in lexical sort
+order. The directory will be executed once: after the build-user has been
+created and before the build-user login shell is spawned.
+
+If you are using the ``nilrt-container`` CLI tool, you should specify your
+desired start scripts in its configuration file or at the commandline; it will
+handle mounting and execution for you.
+
+## Environment
+
+Scripts in this directory run with root permissions in a non-interactive bash.
+They are run with ``--exit-on-error`` and will therefore cause the
+container start to fail, if they exit >0.
+
+The default SHELL is ``/bin/bash``.
+
+The init.container script tries to pupulate the root shell environment with
+some useful variables, all beginning with ``NILRT_``. Some examples:
+
+NILRT_UID  # The numeric uid of the non-root build user
+NILRT_GID  # The numeric gid of the non-root build user
+NILRT_ROOT  # The absolute path to the NILRT .git workspace root, if one exists
+NILRT_BUILD_DIR  # The requested name for the OE build directory.
+
+None of the above variables are guaranteed to be set, so your scripts should
+handle that case gracefully.
+
+----
+
+The source lines for running these scripts are in the ``../init.container``
+script.

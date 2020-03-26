@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+#
+# See usage() below.
+#
+# This script does not necessarily support all branches of the nilrt.git repo.
+set -euo pipefail
+
+function exit_error() {
+	if [ -n "$1" ]; then
+		echo "ERROR: $1" >&2
+	fi
+	exit 1
+}
+
+function usage()
+{
+	cat <<EOF
+$(basename $0) \\
+[-h] [--build-name name] [root]
+
+This script configures a nilrt.git workspace to point to a requested branch
+ref. If the workspace already exists, it checks out the requested branch and
+initializes it, including all subdirectories.
+
+Opts:
+-n|--build-name name      The name suffix to the \`build-\` directory.
+
+Positional:
+root  Path to where the NILRT workspace is/should-be cloned (default:
+      /tmp/nilrt.git)
+
+Envioronmental:
+NILRT_ROOT -> root
+NILRT_CONTAINER_NAME -> --build-name
+EOF
+	exit ${1:-2}
+}
+
+## ARG PARSING ##
+# Defaults
+opt_POSITIONAL=()
+opt_root=${NILRT_ROOT:-/tmp/nilrt.git}
+
+# Options
+while [ $# -gt 0 ]; do
+	case $1 in
+		-h|--help)
+			usage 0
+			;;
+		-d|--build-name)
+			shift && opt_build_name=$1
+			shift
+			;;
+		-*|--*)
+			usage 1
+			;;
+		*)
+			opt_POSITIONAL+=($1)
+			shift
+			;;
+	esac
+done
+# Positional arguments
+if [ -n "${opt_POSITIONAL[0]:-}" ]; then
+	opt_root="${opt_POSITIONAL[0]}"
+fi
+
+
+## MAIN ##
+
+function enter_workspace () {
+	export MACHINE=${NILRT_MACHINE:-x64}
+	if [ -n "${opt_build_name}" ]; then
+		local build_dir=build-${opt_build_name}
+	fi
+	if [ -e "./ni-oe-init-build-env" ]; then
+		source ./ni-oe-init-build-env ${build_dir:-}
+	else
+		exit_error "Could not find init environment script; this branch of nilrt.git is not supported."
+	fi
+}
+
+if [ ! -d "$opt_root" ]; then
+	exit_error "NILRT root directory ${opt_root} is not a directory."
+enter_workspace

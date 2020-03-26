@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+trap "exit 201" ERR
+
+set -E  # needed to properly consume failures from within functions

@@ -1,0 +1,310 @@
+#!/usr/bin/env python3
+
+import sys, os
+import yaml
+
+from pathlib import Path
+from pprint import pprint, pformat
+
+import docker
+import dockerpty
+from docker.types import Mount
+
+# setup module logging
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+DIR_SS_BUILD_ENV = '/etc/init.build-env.d'
+DIR_SS_CONTAINER = '/etc/init.container.d'
+
+
+class NILRTContainerConfig(dict):
+
+    DEFAULTS = {
+        'build-env-scripts': [],
+        'container-start-scripts': [],
+        'image': {
+            'name': 'nilrt-build',
+            'tag' : 'latest',
+        }
+    }
+
+    class ScriptIndex():
+        def __init__(self, min=10, max=98, step=None):
+            if step is None:
+                step = 1
+            self.min = min
+            self.max = max
+            self.step = step
+            self.location = min
+
+        def __next__(self):
+            if self.location > self.max:
+                raise StopIteration
+            else:
+                self.location += self.step
+                return self.location
+
+        def __str__(self):
+            return '%02d' % self.location
+
+    def __init__(self, config_path=None):
+        super().__init__()  # init dict
+
+        if config_path is None:
+            config_path = Path(__file__).parent / 'nilrt-container.conf'
+    
+        self['config_file'] = config_path
+        self['config_root'] = config_path.parent.resolve()
+        self._script_indexes = {}
+        self._start_scripts = {}
+    
+        logger.info('Parsing config file %s' % config_path)
+    
+        with open(self['config_file'], 'r') as fp_config:
+            config_data = yaml.safe_load(fp_config)
+    
+        self.update(config_data['config'])
+
+        self.__init_start_scripts()
+        logger.debug(pformat(self, indent=4))
+
+    def __init_start_scripts(self):
+        def __get_validate_path(self, ss):
+            ss_path = Path(ss)
+
+            # relative paths are based from the location of the conf file, or
+            # CWD
+            if not ss_path.is_absolute():
+                ss_path = self['config_root'] / ss_path
+            logger.debug('ss_path = %s' % ss_path.resolve())
+
+            if not ss_path.exists():
+                raise ValueError('Start script "%s" does not exist.' % ss_path)
+
+            return ss_path
+
+        def __extract_scripts(conf_key, container_path):
+            for script in self.get_or_default(conf_key):
+                script_path = __get_validate_path(self, script)
+                self.add_start_script(script_path, container_path)
+
+        self._start_scripts[DIR_SS_BUILD_ENV] = __extract_scripts(
+            'build-env-scripts', DIR_SS_BUILD_ENV)
+        self._start_scripts[DIR_SS_CONTAINER] = __extract_scripts(
+            'container-start-scripts', DIR_SS_CONTAINER)
+
+    def add_start_script(self, host_path, container_path):
+        host_path = Path(host_path).expanduser().resolve()
+        if not host_path.is_file():
+            raise ValueError('Requested start script "%s" is not a file on '
+                             'host.' % host_path)
+        index = self._script_indexes.get(container_path,
+            NILRTContainerConfig.ScriptIndex(min=25, max=75))
+        print(self._start_scripts)
+        #ss_mounts = self._start_scripts.get(container_path, list())
+        self._start_scripts[container_path].append(Mount(
+            '%s/%s-%s' % (container_path, str(index), host_path.name),
+            '%s' % host_path,
+            type='bind', read_only=False))
+        
+
+    @property
+    def start_scripts(self):
+        return self.container_start_scripts + self.build_env_start_scripts
+
+    @property
+    def build_env_start_scripts(self):
+        print(self._start_scripts)
+        return self._start_scripts.get(DIR_SS_BUILD_ENV, list())
+
+    @property
+    def container_start_scripts(self):
+        return self._start_scripts.get(DIR_SS_CONTAINER, list())
+        
+    @property
+    def image_tag(self):
+        name = self.get_or_default('image', 'name')
+        tag = self.get_or_default('image', 'tag')
+        return ':'.join([name, tag])
+
+    def get_or_default(self, *keys):
+        return self._get_or_default(self, self.DEFAULTS, *keys)
+
+    @staticmethod
+    def _get_or_default(d, defaults, *args):
+        if len(args) == 0:
+            raise ValueError('args cannot be length 0')
+        args = list(args)
+        key = args.pop(0)
+
+        try:
+            d_sub = d.get(key, None)
+        except TypeError:
+            return d
+        except AttributeError:
+            d_sub = None
+
+        try:
+            defaults_sub = defaults.get(key)
+        except (AttributeError, TypeError):
+            if d is None:
+                return defaults_sub
+        except KeyError:
+            raise KeyError('No default value found.')
+
+        if len(args) == 0:
+            return d_sub or defaults_sub
+        else:
+            return NILRTContainerConfig._get_or_default(d_sub, defaults_sub, *args)
+
+
+class NILRTContainer():
+
+    WORKSPACE_PATH = '/mnt/nilrt.git'
+
+    def __init__(self):
+        self.client = docker.APIClient(base_url='unix://var/run/docker.sock')
+        logger.debug(pformat(self.client.info()))
+        self.environment = {}
+
+    def _create_host_config(self, mounts):
+        binds = {}
+        for mount in mounts:
+            pprint(mount)
+            binds[mount['Source']] = {
+                'bind': mount['Target'],
+                'type': mount['Type'],
+                'read_only': 'ro' if mount.get('Read_only', None) else 'rw',
+            }
+            
+
+        return self.client.create_host_config(binds=binds)
+
+    # TODO: remove, if unused
+    def _link_start_scripts(self, container, start_scripts):
+        index = 0
+        for bss in start_scripts.get('builder', []):
+            exec_instance = self.client.exec_create(container,
+                'ln -sf /etc/start-scripts/%s /etc/init.build-env.d/%d-%s' %
+                    (bss, index, bss))
+            self.client.exec_start(exec_instance)
+            index += 1
+
+    def start(self, image_tag, mounts=[], environment={}):
+        run_args = ['-i', '-v']  # interactive and verbose
+
+        host_config = self._create_host_config(mounts)
+
+        run_env = self.environment
+        run_env.update(environment)
+
+        container = self.client.create_container(
+            environment=run_env,
+            host_config=host_config,
+            image=image_tag,
+            stdin_open=True,
+            tty=True,
+            volumes=[mount['Target'] for mount in mounts],
+            )
+
+        dockerpty.start(self.client, container)
+
+## CLI ##
+#########
+
+def cmd_build():
+    raise NotImplementedError()
+
+def cmd_start(args):
+    # check argument sanity
+    host_workspace = args.nilrt_workspace.expanduser().resolve()
+    if not host_workspace.is_dir():
+        raise ValueError('NILRT workspace path "%s" is not a directory.' %
+            host_workspace)
+
+    config = NILRTContainerConfig()
+
+    # setup container config & mounts
+    container = NILRTContainer()
+    mounts = config.start_scripts
+    # If a NILRT workspace bind was declared, bind-mount it to the NILRT
+    # workspace path in the container.
+    mounts.append(Mount(
+        NILRTContainer.WORKSPACE_PATH,
+        host_workspace,
+        type='bind', read_only=False))
+    container.environment['NILRT_ROOT'] = NILRTContainer.WORKSPACE_PATH
+    logger.debug(pformat(mounts, indent=4))
+
+    # default to the effective uid,gid if not specified
+    uid = args.uid or os.geteuid()
+    gid = args.gid or os.getegid()
+    container.environment['NILRT_UID'] = str(uid)
+    container.environment['NILRT_GID'] = str(gid)
+    if args.container_name is not None:
+        container.environment['NILRT_CONTAINER_NAME'] = args.container_name
+
+    # encode the nilrt workspace variables
+#    container.environment['NILRT_BRANCH'] = args.branch
+#    if args.remote is not None:
+#        container.environment['NILRT_REMOTE'] = args.remote
+#    if args.workspace_path is not None:
+#        container.environment['NILRT_ROOT'] = args.workspace_path
+    if args.machine is not None:
+        container.environment['NILRT_MACHINE'] = args.machine
+
+    logger.info('Starting image %s with uid/gid=%d/%d' %
+        (config.image_tag, uid, gid)
+    )
+    container.start(config.image_tag,
+                    mounts=mounts)
+                    
+
+if __name__ == "__main__":
+    from argparse import ArgumentParser
+    parser = ArgumentParser()
+    subparsers = parser.add_subparsers(title='commands', dest='command')
+
+    parser.add_argument('-d', '--debug', action='store_true')
+    parser.add_argument('-n', '--container-name', type=str, default=None)
+    parser.add_argument('-v' ,'--verbose', action='store_true')
+
+    # command: start
+    parser_start = subparsers.add_parser('start')
+    parser_start.set_defaults(func=cmd_start)
+    #parser_start.add_argument('branch', action='store', default='master')
+    #parser_start.add_argument('-b', '--bind', type=str, default=None)
+    #parser_start.add_argument('-c', '--create', type=str, default='master')
+    parser_start.add_argument('-g' ,'--gid', type=int, default=None)
+    #parser_start.add_argument('-r', '--remote', type=str, default=None)
+    parser_start.add_argument('-m', '--machine', type=str, default=None)
+    parser_start.add_argument('-u' ,'--uid', type=int, default=None)
+    #parser_start.add_argument('-w', '--workspace-path', type=str, default=None)
+
+    parser_start.add_argument('nilrt_workspace', type=Path)
+
+    args = parser.parse_args()
+
+    # configure a logging StreamHandler for interactive use
+    sh = logging.StreamHandler()
+    if args.debug:
+        log_level = logging.DEBUG
+        log_fmt = '%(levelname)s:%(name)s: %(message)s'
+    elif args.verbose:
+        log_level = logging.INFO
+        log_fmt = '%(levelname)s: %(message)s'
+    else:
+        log_level = logging.WARNING
+        log_fmt = '%(levelname)s: %(message)s'
+    sh.setLevel(log_level)
+    sh.setFormatter(logging.Formatter(log_fmt))
+    logger.addHandler(sh) 
+
+    logger.debug(pformat(args))
+    if args.command is None:
+        parser.print_help()
+        sys.exit(2)
+
+    args.func(args)
