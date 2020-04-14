@@ -68,10 +68,12 @@ FROM os-base as nilrt-build
 # Install OE dependencies
 RUN apt-get update && apt-get install --assume-yes \
 	bc \
+	build-essential \
 	ccache \
 	chrpath \
 	cpio \
 	cvs \
+	debianutils \
 	desktop-file-utils \
 	diffstat \
 	gawk \
@@ -84,6 +86,7 @@ RUN apt-get update && apt-get install --assume-yes \
 	info \
 	iputils-ping \
 	libc6-dbg \
+	libegl1-mesa \
 	libguestfs0-dbg \
 	libguestfs-tools \
 	libpulse-dev \
@@ -91,8 +94,14 @@ RUN apt-get update && apt-get install --assume-yes \
 	linux-image-amd64 \
 	pigz \
 	pkg-config \
+	pylint3 \
 	python \
 	python-pexpect \
+	python3 \
+	python3-git \
+	python3-jinja2 \
+	python3-pip \
+	python3-pexpect \
 	qemu-kvm \
 	qemu-system-x86 \
 	qemu-utils \
@@ -101,8 +110,12 @@ RUN apt-get update && apt-get install --assume-yes \
 	subversion \
 	texi2html \
 	texinfo \
+	unzip \
 	uuid-runtime \
+	wget \
 	xmlstarlet \
+	xterm \
+	xz-utils \
 ""
 
 # Install virtualbox from upstream because it's not available in debian 9
@@ -124,7 +137,6 @@ RUN rm -rf \
 	/var/tmp/* \
 ""
 
-
 ## LAYER nilrt-build-interactive
 # Setup for interactive development
 FROM nilrt-build as nilrt-build-interactive
@@ -140,8 +152,12 @@ COPY build-scripts/trap-off ${NILRT_DIR_INIT_CONTAINER}/99-trap-off
 
 COPY scripts/init.container.d/01-bashrc-source-build-env ${NILRT_DIR_INIT_CONTAINER}/01-bashrc-source-build-env
 COPY scripts/init.container.d/02-inject-container-args   ${NILRT_DIR_INIT_CONTAINER}/02-inject-container-args
+COPY scripts/init.container.d/03-create-ssh-config   ${NILRT_DIR_INIT_CONTAINER}/03-create-ssh-config
+COPY scripts/init.container.d/04-create-p4config   ${NILRT_DIR_INIT_CONTAINER}/04-create-p4config
+
+# Copy p4 config files
+COPY staging/ /tmp/staging/
 
 # special container init file
 COPY scripts/init.container /etc/init.container
 ENTRYPOINT ["/etc/init.container"]
-CMD ["1000", "1000"]

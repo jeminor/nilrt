@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# This script creates ~/.ssh/config to set the identity file for
+# git.natinst.com accesses
+set -euo pipefail
+
+if [ -a "$NILRT_SSH_KEY" ]; then
+   ssh_dir="/home/${NILRT_USERNAME}/.ssh"
+   mkdir -p "${ssh_dir}"
+
+   ssh_config_file="${ssh_dir}/config"
+   touch "${ssh_config_file}"
+
+   cat > "$ssh_config_file" <<EOF
+Host git.natinst.com
+   IdentityFile "$NILRT_SSH_KEY"
+   StrictHostKeyChecking no
+EOF
+
+chmod ug+x "${ssh_config_file}"
+fi

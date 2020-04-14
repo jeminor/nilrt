@@ -3,7 +3,7 @@
 # See usage() below.
 #
 # This script does not necessarily support all branches of the nilrt.git repo.
-set -euo pipefail
+set -eo pipefail
 
 function usage()
 {
@@ -51,11 +51,11 @@ env | grep '^NILRT_*'
 ## ARG PARSING ##
 # Defaults
 opt_POSITIONAL=()
-opt_branch=${NILRT_BRANCH:-master}
+opt_branch=${NILRT_BRANCH:-nilrt/master/sumo}
 opt_build_name=${NILRT_CONTAINER_NAME:-}
 opt_force=false
 opt_gid=${NILRT_GID:-`id -g`}
-opt_remote=${NILRT_REMOTE:-https://github.com/ni/nilrt.git}
+opt_remote=${NILRT_REMOTE:-ssh://git@git.natinst.com/nilrt.git}
 opt_root=${NILRT_ROOT:-/tmp/nilrt.git}
 opt_uid=${NILRT_UID:-`id -u`}
 
@@ -146,17 +146,20 @@ function init_workspace (){
 		local_branch_name="${opt_build_name}/${local_branch_name}"
 	fi
 
+	echo "Checking out $local_branch_name"
 	git checkout ${local_branch_name} || \
 	git checkout --force -b ${local_branch_name} ${git_remote_name}/${opt_branch}
 
+	echo "Submodule update"
 	git submodule update --init --remote --checkout
-	git submodule foreach <<EOF
-if [ git show-ref --verify --quiet refs/heads/${local_branch_name} ]; then
+	echo "Submodule checkout"
+	git submodule foreach "
+if ! [ git show-ref --verify --quiet refs/heads/${local_branch_name} ]; then
 	git checkout ${local_branch_name}
 else
 	git checkout -b ${local_branch_name} HEAD
 fi
-EOF
+"
 }
 
 # Add a .git/info/exclude entry for the glob param
@@ -184,4 +187,6 @@ function enter_workspace () {
 }
 
 init_workspace
-enter_workspace
+#enter_workspace
+
+set +eo pipefail

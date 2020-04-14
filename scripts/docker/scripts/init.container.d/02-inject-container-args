@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# This script writes all declared "NILRT_" env variables into a runparts file,
-# to be loaded by the build environment.
+# This script writes all declared "P4CONFIG", "NILRT_" and "nibuild_" env
+# variables into a runparts file, to be loaded by the build environment.
 set -euo pipefail
 
 build_env_runpart="${NILRT_DIR_INIT_BUILD}/01-nilrt-env.container"
 
 touch "${build_env_runpart}"
-for nilrt_env in $(env | grep '^NILRT_.*='); do
+for nilrt_env in $(env | grep -P '^(NILRT|nibuild)_.*='); do
 	echo "export $nilrt_env" >>"${build_env_runpart}"
+done
+
+for line in $(env | grep -P 'P4CONFIG|P4TICKETS'); do
+	echo "export $line" >>"${build_env_runpart}"
 done
 chmod ug+x "${build_env_runpart}"

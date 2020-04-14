@@ -11,10 +11,10 @@ class CONTAINER_EXIT_CODES():
 
 from argparse import ArgumentParser
 parser = ArgumentParser()
-parser.add_argument('uid', type=int)
-parser.add_argument('gid', type=int)
+parser.add_argument('--uid', type=int, default=os.environ['NILRT_UID'])
+parser.add_argument('--gid', type=int, default=os.environ['NILRT_GID'])
 parser.add_argument('bash_args', nargs='*', default=['bash'], action='store')
-parser.add_argument('--builder-name', nargs='?', default='builder')
+parser.add_argument('--builder-name', nargs='?', default=os.environ['NILRT_USERNAME'])
 parser.add_argument('-v', '--verbose', action='store_true')
 args = parser.parse_args()
 
@@ -86,7 +86,7 @@ Exit code 200 to actually exit the container.
                             builder_name, bash_args),
                          shell=True)
         proc.communicate()
-    
+
         # Restart bash if the error code was 0, to keep the container alive if
         # the users accidently ctrl+Ds or similar.
         # Else if there was an error, restart in recovery mode.

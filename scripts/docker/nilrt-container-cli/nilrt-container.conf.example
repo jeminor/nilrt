@@ -1,42 +1,79 @@
 # vi: set syntax=yaml expandtab ts=2:
 #
-# config:
-#   conatiner-start-scripts:
-#     # scripts to copy into /etc/init.build-env.d, which will execute on
-#     # container start.
-#     - path/to/script
-#
-#   builder:
-#     uid: numeric uid of the build user (defaults to the uid of the caller)
-#     gid: numeric gid of the build user (defaults to the gid of the caller)
-#     groups:
-#       # additional permission groups to give the build user
-#        - group_name|gid
-#   bashrc: path to a custom bashrc for the build user
-#
-#   nilrt_workspace 
-#
-#   workspaces:  # local workspaces to be 
-#     # build workspaces to be created. If not specified, none will be created.
-#     nilrt:
-#       src: path/to/nilrt/root (host)
-#       dst: path/to/nilrt/root (container)  # default: ~/nilrt
-#       create: True|False  # create if source does not exist
-#     perforce:
-#       src: path/to/perforce/root (host)
-#       dst: path/to/perforce/root (container)  # default: ~/perforce
-#       create: True|False  # create if source does not exist
-#     penguin:
-#       src: path/to/penguin/root (host)
-#       dst: path/to/penguin/root (container)  # default: ~/penguin
-#       create: True|False  # create if source does not exist
-#     
 ---
 config:
+  p4-setup:
+    user: sravicha
+    p4tickets: /mnt/p4tickets
+    servers:
+      # 1. will create a .config file in the p4 root directory
+      # 2. will also create nibuild env with the following
+      perforce:
+        p4port: perforce.natinst.com:1666
+        clientspec: docker_test_perforce
+        p4root: /mnt/perforce
+      penguin:
+        p4port: penguin.natinst.com:1666
+        clientspec: sravicha-shruthi-rtos-dev-docker-penguin
+        p4root: /mnt/penguin
+
+  git-setup:
+    remote: ssh://git@git.natinst.com/nilrt.git
+    branch: nilrt/20.0/sumo
+    root: /mnt/nilrt.git
+
+  bind-mounts:
+    nilrt:
+      src: /home/sravicha/docker/projects/nilrt-sumo
+      dest: /mnt/nilrt.git
+      read-only: False
+    perforce:
+      src: /tmp/docker_test/perforce
+      dest: /mnt/perforce
+      read-only: False
+    penguin:
+      src: /tmp/docker_test/penguin
+      dest: /mnt/penguin
+      read-only: False
+    argo:
+      src: /mnt/argo/RnD
+      dest: /mnt/argo/RnD
+      read-only: True
+    perforceExports:
+      src: /mnt/perforceExports
+      dest: /mnt/perforceExports
+      read-only: True
+    penguinExports:
+      src: /mnt/penguinExports
+      dest: /mnt/penguinExports
+      read-only: True
+    ssh-key: # git will be configured to use this ssh key for reads and writes
+      src: /home/sravicha/.ssh/id_rsa
+      dest: /mnt/ssh/id_rsa
+      read-only: True
+    p4ticket:
+      src: /home/sravicha/.p4tickets
+      dest: /mnt/p4tickets
+      read-only: True
+
   build-env-scripts:
-    #- ../scripts/init-scripts/init-nilrt-git-env
+    - ../scripts/init-scripts/init-nilrt-git-env
+
+  # scripts to copy into /etc/init.build-env.d, which will execute on
+  # container start.
   container-start-scripts:
     - ../scripts/init-scripts/test
+
   image:
     name: nilrt-build
     tag:  latest
+    Dockerfile: ../Dockerfile.nilrt
+
+#  workspace:
+#    username: oe-builder
+#    uid: 1000
+#    gid: 1000
+
+# Environment variables to be set in the container
+# env:
+#    SRC: /x/yz/

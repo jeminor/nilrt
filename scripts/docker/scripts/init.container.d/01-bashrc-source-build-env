@@ -11,3 +11,5 @@ if [ -d "$NILRT_DIR_INIT_BUILD" ]; then
 	done
 fi
 EOF
+
+chmod ug+x "${BUILDER_HOME}/.bashrc"

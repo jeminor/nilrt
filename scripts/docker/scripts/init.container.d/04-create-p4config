@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# This script creates p4 config files with clienspec info in the container
+# from the codegen'd files.
+set -euo pipefail
+
+for old_config_file in /tmp/staging/*.config; do
+   read workspace_root < $old_config_file
+   # Extract the destination file from the first line - "workspace_root /mnt/abc/perf.conf"
+   new_config_file=`echo "${workspace_root}" | grep -oP '(^workspace_root )\K(.+)'`
+   touch "${new_config_file}"
+   while IFS= read -r line; do
+      # Copy all remaining lines to the p4 config file
+      if ! [[ $line == "workspace_root"* ]]; then
+         echo $line >> $new_config_file
+      fi
+   done < "${old_config_file}"
+   chmod ug+x "${new_config_file}"
+done
