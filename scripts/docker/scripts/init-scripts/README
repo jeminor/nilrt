@@ -1,0 +1,8 @@
+# init-scripts
+
+This directory is intended to host scripts which may be mounted and executed by
+the nilrt-build container in arbitrary contexts.
+
+Unlike the sibling `init.*.d` directories, there is no implied *correct* time
+for these scripts to run, and it is assumed that the user will negotiate how to
+mount them into the build context.

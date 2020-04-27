@@ -16,9 +16,9 @@ handle mounting and execution for you.
 
 ## Environment
 
-Scripts in this directory run with root permissions in a non-interactive bash.
-They are run with ``--exit-on-error`` and will therefore cause the
-container start to fail, if they exit >0.
+Scripts in this directory run with root permissions in a non-interactive shell.
+They are run with ``--exit-on-error`` and will therefore cause the container
+start to fail, if they exit >0.
 
 The default SHELL is ``/bin/bash``.
 

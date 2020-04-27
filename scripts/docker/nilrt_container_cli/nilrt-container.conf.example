@@ -62,7 +62,6 @@ config:
   # scripts to copy into /etc/init.build-env.d, which will execute on
   # container start.
   container-start-scripts:
-    - ../scripts/init-scripts/test
 
   image:
     name: nilrt-build

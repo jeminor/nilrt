@@ -1,23 +1,34 @@
 #!/usr/bin/env python3
 
-import sys, os
-import yaml
+"""A module to build, configure, and run NILRT build containers.
+
+This module contains a CLI application and backing logic to:
+(a) build NILRT-building docker containers from a Dockerfile
+(b) process the contents of nilrt-container.conf files
+(c) standup a NILRT-build-environment using the users' configuration
+(d) dynamically enter that environment and provide the user with a viable,
+    interactive shell
+
+Module Usage:
+    *See CLI section below*
+"""
 
 from pathlib import Path
 from pprint import pprint, pformat
+import logging
+import os
+import shutil
+import sys
+import yaml
 
 import docker
 import dockerpty
 from docker.types import Mount
 
 # setup module logging
-import logging
-
-import shutil
-
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
 
 DIR_SS_BUILD_ENV = '/etc/init.build-env.d'
 DIR_SS_CONTAINER = '/etc/init.container.d'
@@ -25,6 +36,20 @@ P4_CONFIG_FILE = '.p4config'
 
 
 class NILRTContainerConfig(dict):
+    """Parses and stores configuration values for the NILRTContainer class.
+
+    This class inherits from dict and stores configuration values within its
+    internal dictionary.
+
+    Attributes:
+        DEFAULTS: dict of default values for NILRTContainer configuration values
+
+    Public Dictionary Keys:
+        'config_file': pathlib.Path to the external configuration file, from
+            which this object was created
+        'config_root': an absolute pathlib.Path to the parent directory of
+            'config_file'
+    """
 
     DEFAULTS = {
         'workspace' : {
@@ -45,17 +70,34 @@ class NILRTContainerConfig(dict):
         }
     }
 
+
     class ScriptIndex():
-        def __init__(self, min=10, max=98, step=None):
+        """Utility class for generating a sequence of runparts numeric prefixes.
+
+        This utility class generates a stepped sequence of numeric prefixes,
+        which evenly distribute values between index_min and index_max. These
+        prefixes are useful to generate runparts directories.
+
+        This class implements the Iterator protocol.
+
+        Attributes:
+            index_min: An integer, which is the minimum prefix value (incl.)
+            index_max: An integer, which is the maximum prefix value (incl.)
+            step: An integer distance, by which the generator steps between
+                index_min and index_max.
+            location: The current sequence value.
+        """
+
+        def __init__(self, index_min=10, index_max=98, step=None):
             if step is None:
                 step = 1
-            self.min = min
-            self.max = max
+            self.index_min = index_min
+            self.index_max = index_max
             self.step = step
-            self.location = min
+            self.location = index_min
 
         def __next__(self):
-            if self.location > self.max:
+            if self.location > self.index_max:
                 raise StopIteration
             else:
                 self.location += self.step
@@ -94,8 +136,7 @@ class NILRTContainerConfig(dict):
 
     def __get_validate_path(self, path):
         full_path = Path(path)
-        # relative paths are based from the location of the conf file, or
-        # CWD
+        # relative paths are based from the location of the conf file, or CWD
         if not full_path.is_absolute():
             full_path = self['config_root'] / full_path
         logger.debug('full_path = %s' % full_path.resolve())
@@ -121,8 +162,9 @@ class NILRTContainerConfig(dict):
         if not host_path.is_file():
             raise ValueError('Requested start script "%s" is not a file on '
                              'host.' % host_path)
-        index = self._script_indexes.get(container_path,
-            NILRTContainerConfig.ScriptIndex(min=25, max=75))
+        index = self._script_indexes.get(
+            container_path,
+            NILRTContainerConfig.ScriptIndex(index_min=25, index_max=75))
         self._start_scripts[container_path].append(Mount(
             '%s/%s-%s' % (container_path, str(index), host_path.name),
             '%s' % host_path,
@@ -132,7 +174,8 @@ class NILRTContainerConfig(dict):
         self._bind_mounts = []
         for key, value in self.get_or_default('bind-mounts').items():
             self._bind_mounts.append(Mount(value['dest'], value['src'],
-                                     type='bind', read_only=bool(value['read-only'])))
+                                           type='bind',
+                                           read_only=bool(value['read-only'])))
             if key == 'ssh-key':
                 self._container_ssh_key = value['dest']
 
@@ -142,13 +185,18 @@ class NILRTContainerConfig(dict):
         p4_servers = p4_setup['servers']
         staging_directory = 'staging'
         env = {}
-        shutil.rmtree(staging_directory)
+        try:
+            shutil.rmtree(staging_directory)
+        except FileNotFoundError:
+            pass
         os.mkdir(staging_directory)
         for server, config in p4_servers.items():
             filename = os.path.join(staging_directory, server + '.config')
             entry = '{}={}\n'
             with open(filename, 'w') as filep:
-                filep.write('workspace_root ' + os.path.join(config['p4root'], P4_CONFIG_FILE) + '\n')
+                filep.write('workspace_root ' + \
+                    os.path.join(config['p4root'], P4_CONFIG_FILE) + \
+                    '\n')
                 filep.write(entry.format('P4CLIENT', config['clientspec']))
                 filep.write(entry.format('P4USER', p4_user))
                 filep.write(entry.format('P4PORT', config['p4port']))
@@ -209,7 +257,8 @@ class NILRTContainerConfig(dict):
 
     @property
     def dockerfile_path(self):
-        return self.__get_validate_path(self.get_or_default('image', 'Dockerfile'))
+        return self.__get_validate_path(self.get_or_default('image',
+                                                            'Dockerfile'))
 
     @property
     def start_scripts(self):
@@ -233,46 +282,37 @@ class NILRTContainerConfig(dict):
         return self._get_or_default(self, self.DEFAULTS, *keys)
 
     @staticmethod
-    def _get_or_default(d, defaults, *args):
+    def _get_or_default(dict_tree, defaults, *args):
         if len(args) == 0:
             raise ValueError('args cannot be length 0')
         args = list(args)
         key = args.pop(0)
 
         try:
-            d_sub = d.get(key, None)
+            dict_tree_sub = dict_tree.get(key, None)
         except TypeError:
-            return d
+            return dict_tree
         except AttributeError:
-            d_sub = None
+            dict_tree_sub = None
 
         try:
             defaults_sub = defaults.get(key)
         except (AttributeError, TypeError):
-            if d is None:
+            if dict_tree is None:
                 return defaults_sub
         except KeyError:
             raise KeyError('No default value found.')
 
         if len(args) == 0:
-            return d_sub or defaults_sub
+            return dict_tree_sub or defaults_sub
         else:
-            return NILRTContainerConfig._get_or_default(d_sub, defaults_sub, *args)
-
-
-# TODO: Make a singleton object of this class
-class DockerClient:
-    def __init__(self):
-        self._client = docker.APIClient(base_url='unix://var/run/docker.sock')
-
-    @property
-    def client(self):
-        return self._client
+            return NILRTContainerConfig._get_or_default(
+                dict_tree_sub, defaults_sub, *args)
 
 
 class NILRTContainer():
     def __init__(self):
-        self.client = DockerClient().client
+        self.client = docker.APIClient(base_url='unix://var/run/docker.sock')
         logger.debug(pformat(self.client.info()))
         self.environment = {}
 
@@ -288,6 +328,23 @@ class NILRTContainer():
 
 
         return self.client.create_host_config(binds=binds)
+
+    def build(self, image_tag, dockerfile_path, no_cache=False):
+        workspace=os.path.dirname(dockerfile_path.resolve())
+        output_iterator = self.client.build(
+            path=str(workspace),
+            dockerfile=str(dockerfile_path),
+            nocache=no_cache,
+            tag=image_tag,
+            rm=True,
+            decode=True)
+        for line in output_iterator:
+            if 'stream' in line:
+                print(line['stream'], end='')
+            # Docker throws an error the first time the error happens, and then
+            # caches the value and only prints the error, not throw (WEIRD?).
+            elif 'error' in line:
+                raise Exception(line['error'])
 
     def start(self, image_tag, mounts=[], environment={}):
         run_args = ['-i', '-v']  # interactive and verbose
@@ -312,9 +369,8 @@ class NILRTContainer():
 ## CLI ##
 #########
 
+
 def cmd_build(args, config):
-    docker_client = DockerClient().client
-    nocache = False
     if args.prune:
         docker_client.prune_containers()
         docker_client.prune_images()
@@ -322,25 +378,20 @@ def cmd_build(args, config):
             docker_client.remove_image(config.image_tag)
         except docker.errors.ImageNotFound:
             pass
-        nocache = True
+        args.no_cache = True
 
-    output_iterator = docker_client.build(path=Path(__file__).parent.parent.resolve().as_posix(),
-                                          dockerfile=config.dockerfile_path,
-                                          nocache=nocache,
-                                          tag=config.image_tag,
-                                          rm=True,
-                                          decode=True)
-    for line in output_iterator:
-        if 'stream' in line:
-            logger.debug(line['stream'])
-        # Docker throws an error the first time the error happens, and then
-        # caches the value and only prints the error, not throw (WEIRD?).
-        elif 'error' in line:
-            raise Exception(line['error'])
+    if not os.path.exists(args.dockerfile):
+        raise ValueError('Found no NILRT dockerfile at %s' % \
+            args.dockerfile.resolve())
+
+    container = NILRTContainer()
+    container.build(config.image_tag, args.dockerfile, args.no_cache)
+
 
 def cmd_start(args, config):
     if not config.nilrt_workspace:
-        raise Exception("Provide nilrt workspace bind mnt directory in .conf file.")
+        raise Exception('Provide nilrt workspace bind mnt directory in .conf'\
+                        'file.')
 
     # setup container config & mounts
     container = NILRTContainer()
@@ -359,8 +410,8 @@ def cmd_start(args, config):
         container.environment['NILRT_MACHINE'] = args.machine
 
     logger.info('Starting image %s with uid/gid=%d/%d' %
-        (config.image_tag, config.workspace['uid'], config.workspace['gid'])
-    )
+                (config.image_tag, config.workspace['uid'],
+                 config.workspace['gid']))
     container.start(config.image_tag,
                     mounts=mounts)
 
@@ -372,29 +423,34 @@ if __name__ == "__main__":
 
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('-n', '--container-name', type=str, default=None)
-    parser.add_argument('-v' ,'--verbose', action='store_true')
+    parser.add_argument('-v', '--verbose', action='store_true')
 
     # command: build
     parser_build = subparsers.add_parser('build')
     parser_build.set_defaults(func=cmd_build)
     parser_build.add_argument('-p', '--prune', action='store_true',
-                              help='Delete existing unused containers, images \
-                              and the image specified in the .conf file \
-                              (if it already exists)')
+        help='Delete existing unused containers, images and the image '\
+             'specified in the .conf file (if it already exists)')
+    parser_build.add_argument('--no-cache', action='store_true',
+        help='Do not use cache when building the image.')
+    parser_build.add_argument('dockerfile', type=Path, nargs='?',
+        default='Dockerfile.nilrt',
+        help='Path to the NILRT Dockerfile which should be used to build this '\
+             'image.')
 
     # command: start
     parser_start = subparsers.add_parser('start')
     parser_start.set_defaults(func=cmd_start)
     parser_start.add_argument('-m', '--machine', type=str, default=None)
 
-    args = parser.parse_args()
+    cli_args = parser.parse_args()
 
     # configure a logging StreamHandler for interactive use
     sh = logging.StreamHandler()
-    if args.debug:
+    if cli_args.debug:
         log_level = logging.DEBUG
         log_fmt = '%(levelname)s:%(name)s: %(message)s'
-    elif args.verbose:
+    elif cli_args.verbose:
         log_level = logging.INFO
         log_fmt = '%(levelname)s: %(message)s'
     else:
@@ -404,10 +460,9 @@ if __name__ == "__main__":
     sh.setFormatter(logging.Formatter(log_fmt))
     logger.addHandler(sh)
 
-    logger.debug(pformat(args))
-    if args.command is None:
+    logger.debug(pformat(cli_args))
+    if cli_args.command is None:
         parser.print_help()
         sys.exit(2)
 
-    config = NILRTContainerConfig()
-    args.func(args, config)
+    cli_args.func(cli_args, NILRTContainerConfig())

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# This script installs virtualbox 6.0 on Debian stretch docker images.
+# This script isntalls the p4 CLI utility on linux docker images.
 set -xeuo pipefail
 
 p4_release="r19.2"
