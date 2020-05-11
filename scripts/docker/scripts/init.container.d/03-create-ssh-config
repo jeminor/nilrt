@@ -14,6 +14,9 @@ if [ -a "$NILRT_SSH_KEY" ]; then
 Host git.natinst.com
    IdentityFile "$NILRT_SSH_KEY"
    StrictHostKeyChecking no
+Host github.com
+   IdentityFile "$NILRT_SSH_KEY"
+   StrictHostKeyChecking no
 EOF
 
 chmod ug+x "${ssh_config_file}"

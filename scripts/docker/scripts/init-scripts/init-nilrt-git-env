@@ -154,11 +154,11 @@ function init_workspace (){
 	git submodule update --init --remote --checkout
 	echo "Submodule checkout"
 	git submodule foreach "
-if ! [ git show-ref --verify --quiet refs/heads/${local_branch_name} ]; then
-	git checkout ${local_branch_name}
-else
-	git checkout -b ${local_branch_name} HEAD
-fi
+	if git show-ref --verify --quiet refs/heads/${local_branch_name}; then
+		git checkout ${local_branch_name}
+	else
+		git checkout -b ${local_branch_name} HEAD
+	fi
 "
 }
 

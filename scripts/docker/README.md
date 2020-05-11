@@ -7,7 +7,10 @@ How to start using this project to run a build container?
     (https://docs.docker.com/install/linux/linux-postinstall/) to start the
     docker daemon post installation.
 5.  Install p4 CLI and set up a perforce and penguin workspace for the docker
-    container on the host
+    container on the host. Ensure that the p4 clients are not associated with
+    the host name. Run `p4 client` and delete the host entry for both the 
+    workspaces. This will ensure that the workspaces can be accessed from 
+    within the container.
 6.  Set the client root of the workspaces to be the bind-mounted client root
     directories on the container.
     For exampe, if the client root mount point on the container is going to be

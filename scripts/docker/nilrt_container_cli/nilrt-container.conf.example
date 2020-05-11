@@ -66,7 +66,6 @@ config:
   image:
     name: nilrt-build
     tag:  latest
-    Dockerfile: ../Dockerfile.nilrt
 
 #  workspace:
 #    username: oe-builder

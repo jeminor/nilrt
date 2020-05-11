@@ -65,8 +65,7 @@ class NILRTContainerConfig(dict):
         'container-start-scripts': [],
         'image': {
             'name': 'nilrt-build',
-            'tag' : 'latest',
-            'Dockerfile': '../Dockerfile'
+            'tag' : 'latest'
         }
     }
 
@@ -109,10 +108,7 @@ class NILRTContainerConfig(dict):
     def __init__(self, config_path=None):
         super().__init__()  # init dict
 
-        if config_path is None:
-            config_path = Path(__file__).parent / 'nilrt-container.conf'
-
-        self['config_file'] = config_path
+        self['config_file'] = config_path.resolve()
         self['config_root'] = config_path.parent.resolve()
         self._script_indexes = {}
         self._start_scripts = {}
@@ -121,7 +117,7 @@ class NILRTContainerConfig(dict):
 
         logger.info('Parsing config file %s' % config_path)
 
-        with open(self['config_file'], 'r') as fp_config:
+        with open(str(self['config_file']), 'r') as fp_config:
             config_data = yaml.safe_load(fp_config)
 
         self.update(config_data['config'])
@@ -183,7 +179,9 @@ class NILRTContainerConfig(dict):
         p4_setup = self.get_or_default('p4-setup')
         p4_user = p4_setup['user']
         p4_servers = p4_setup['servers']
-        staging_directory = 'staging'
+        staging_directory = os.path.join( \
+                                str(self['config_root'].parent.resolve()),
+                                'staging')
         env = {}
         try:
             shutil.rmtree(staging_directory)
@@ -256,11 +254,6 @@ class NILRTContainerConfig(dict):
         return self['workspace']
 
     @property
-    def dockerfile_path(self):
-        return self.__get_validate_path(self.get_or_default('image',
-                                                            'Dockerfile'))
-
-    @property
     def start_scripts(self):
         return self.container_start_scripts + self.build_env_start_scripts
 
@@ -330,7 +323,7 @@ class NILRTContainer():
         return self.client.create_host_config(binds=binds)
 
     def build(self, image_tag, dockerfile_path, no_cache=False):
-        workspace=os.path.dirname(dockerfile_path.resolve())
+        workspace=os.path.dirname(str(dockerfile_path.resolve()))
         output_iterator = self.client.build(
             path=str(workspace),
             dockerfile=str(dockerfile_path),
@@ -380,7 +373,7 @@ def cmd_build(args, config):
             pass
         args.no_cache = True
 
-    if not os.path.exists(args.dockerfile):
+    if not os.path.exists(str(args.dockerfile)):
         raise ValueError('Found no NILRT dockerfile at %s' % \
             args.dockerfile.resolve())
 
@@ -424,7 +417,8 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('-n', '--container-name', type=str, default=None)
     parser.add_argument('-v', '--verbose', action='store_true')
-
+    parser.add_argument('-c', '--config-file', type=Path,
+                        default=Path(__file__).parent / 'nilrt-container.conf')
     # command: build
     parser_build = subparsers.add_parser('build')
     parser_build.set_defaults(func=cmd_build)
@@ -434,7 +428,7 @@ if __name__ == "__main__":
     parser_build.add_argument('--no-cache', action='store_true',
         help='Do not use cache when building the image.')
     parser_build.add_argument('dockerfile', type=Path, nargs='?',
-        default='Dockerfile.nilrt',
+        default=Path(__file__).parent.resolve().parent / 'Dockerfile.nilrt',
         help='Path to the NILRT Dockerfile which should be used to build this '\
              'image.')
 
@@ -465,4 +459,4 @@ if __name__ == "__main__":
         parser.print_help()
         sys.exit(2)
 
-    cli_args.func(cli_args, NILRTContainerConfig())
+    cli_args.func(cli_args, NILRTContainerConfig(cli_args.config_file))
