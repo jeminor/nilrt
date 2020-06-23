@@ -6,43 +6,38 @@ How to start using this project to run a build container?
 4.  Follow [instructions]
     (https://docs.docker.com/install/linux/linux-postinstall/) to start the
     docker daemon post installation.
-5.  Install p4 CLI and set up a perforce and penguin workspace for the docker
-    container on the host. Ensure that the p4 clients are not associated with
-    the host name. Run `p4 client` and delete the host entry for both the 
-    workspaces. This will ensure that the workspaces can be accessed from 
-    within the container.
-6.  Set the client root of the workspaces to be the bind-mounted client root
-    directories on the container.
-    For exampe, if the client root mount point on the container is going to be
-    /mnt/perforce, create a /mnt/perforce on the host too and set the client
-    root workspace of the perforce account to be /mnt/perforce.
-    When you are logged in in the container, you do not have to change the
-    workspace root because it matches what was on the host.
-7.  Login to the p4 workspaces and generate p4 tickets - `p4 login -a`. The
+5.  Install p4 CLI and set up a perforce and penguin workspace host. Ensure
+    that the p4 clients are not associated with the host name. To confirm, run
+    `p4 client` and delete the host entry for both the workspaces. This will
+    ensure that the workspaces can be accessed from within the container.
+6.  Login to the p4 workspaces and generate p4 tickets - `p4 login -a`. The
     tickets file will be located in ~/.p4tickets, by default.
-8.  Mount argo\RnD, nirvana\perforceExports and penguin\balticExports on the
+7.  Mount argo/RnD, nirvana/perforceExports and penguin/balticExports on the
     host.
-9.  If you are going to be working in the OE nilrt repos, obtain write
-    permissions by providing your ssh RSA public key to the gobbler
-    administrator. To ensure that you have access, run
-    `ssh -T git@git.natinst.com` on the host. This command should run without
-    requesting you for a password and list the repos hosted on git.natinst.com.
-10. Look up the nilrt-container.conf.example file in this project. This file has
-    all the configuration you will need to set to get started with the build
-    containers. Add all the mount points, ssh key, p4 setup, etc. you created
-    above to this file, including preferred user id, group id, Docker image
-    name, etc.
-11. Run `./nilrt-container-cli/nilrt-container -d build` from the docker
-    directory. This will build the docker image based on instructions in
-    _Dockerfile.nilrt_. Use the `-p` option to clean up the workspace removing
-    existing containers and images.
-12. Run `./nilrt-container-cli/nilrt-container -d start`. This will start a
-    container from the image with the config in nilrt-container.conf.example.
-    The container is set up with p4 and git workspaces and bash started in the
-    git project. The bash shell in the container is started such that exit codes
-    under 200 will not exit the container. To exit the container, run
-    `exit_container`.
-13. If the container enters _Recovery mode_, run `source ~/.bashrc` to set up
+8.  Optional: If you are going to be working in the OE nilrt repos, obtain
+    write permissions by providing your ssh RSA public key to the
+    git.natinst.com administrator. To ensure that you have access, run
+    `ssh -T git@git.natinst.com` on the host. This command should not request
+    a password and list the repos hosted on git.natinst.com.
+9.  Look up the nilrt-container.conf.example file in this project. This file
+    has all the configuration you will need to set to get started with the
+    build containers. Copy this file into a new .conf file and update the file
+    with all the mount points, ssh key, p4 setup, etc. you created above,
+    including preferred user id, group id, Docker image name, etc.
+    NOTE: Set the perforce and penguin bind-mounts dest the same as the src so
+    that when you are logged into the container, you do not have to change the
+    workspace root because it matches what was on the host.
+10. Run `./nilrt-container-cli/nilrt-container -c <conf_file> -d build` from
+    the docker directory. This will build the docker image based on
+    instructions in _Dockerfile.nilrt_. Use the `-p` option to clean up the
+    workspace removing existing containers and images.
+11. Run `./nilrt-container-cli/nilrt-container -c <conf_file> -d start`. This
+    will start a container interactively from the image with the provided
+    config. The container is set up with p4 and git workspaces and bash started
+    in the git project. The bash shell in the container is started such that
+    exit codes under 200 will not exit the container. To exit the container,
+    run `exit_container`.
+12. If the container enters _Recovery mode_, run `source ~/.bashrc` to set up
     the build environment again.
 
 

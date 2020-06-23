@@ -3,56 +3,54 @@
 ---
 config:
   p4-setup:
-    user: sravicha
+    user: rtosbuild
     p4tickets: /mnt/p4tickets
     servers:
-      # 1. will create a .config file in the p4 root directory
-      # 2. will also create nibuild env with the following
       perforce:
         p4port: perforce.natinst.com:1666
-        clientspec: docker_test_perforce
-        p4root: /mnt/perforce
+        clientspec: rtosbuild-rtos-jslave-1-perforce
+        p4root: /srv/jenkins/perforce
       penguin:
         p4port: penguin.natinst.com:1666
-        clientspec: sravicha-shruthi-rtos-dev-docker-penguin
-        p4root: /mnt/penguin
+        clientspec: rtosbuild-rtos-jslave-1-penguin
+        p4root: /srv/jenkins/penguin
 
   git-setup:
-    remote: ssh://git@git.natinst.com/nilrt.git
-    branch: nilrt/20.0/sumo
+    remote: git://github.com/ni/nilrt.git # Change to ssh url for write-access
+    branch: nilrt/master/sumo
     root: /mnt/nilrt.git
 
   bind-mounts:
     nilrt:
-      src: /home/sravicha/docker/projects/nilrt-sumo
+      src: /tmp/sravicha_docker/container_workspace
       dest: /mnt/nilrt.git
       read-only: False
     perforce:
-      src: /tmp/docker_test/perforce
-      dest: /mnt/perforce
+      src: /srv/jenkins/perforce
+      dest: /srv/jenkins/perforce
       read-only: False
     penguin:
-      src: /tmp/docker_test/penguin
-      dest: /mnt/penguin
+      src: /srv/jenkins/penguin
+      dest: /srv/jenkins/penguin
       read-only: False
     argo:
-      src: /mnt/argo/RnD
+      src: /srv/jenkins/nas/us-aus-argo/RnD
       dest: /mnt/argo/RnD
       read-only: True
     perforceExports:
-      src: /mnt/perforceExports
+      src: /srv/jenkins/nas/nirvana/perforceExports
       dest: /mnt/perforceExports
       read-only: True
     penguinExports:
-      src: /mnt/penguinExports
+      src: /srv/jenkins/nas/baltic/penguinExports
       dest: /mnt/penguinExports
       read-only: True
     ssh-key: # git will be configured to use this ssh key for reads and writes
-      src: /home/sravicha/.ssh/id_rsa
+      src: /srv/jenkins/.ssh/id_rsa
       dest: /mnt/ssh/id_rsa
       read-only: True
     p4ticket:
-      src: /home/sravicha/.p4tickets
+      src: /srv/jenkins/.p4tickets
       dest: /mnt/p4tickets
       read-only: True
 
