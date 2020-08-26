@@ -163,7 +163,7 @@ COPY scripts/init.container /etc/init.container
 ENTRYPOINT ["/etc/init.container"]
 
 # Add things the the Python 3.6 compile needs
-RUN apt-get update && apt-get install --assume-yes libssl-dev
+RUN apt-get update && apt-get install --assume-yes libssl-dev libsqlite3-dev
 
 # All of this is taken from: https://raw.githubusercontent.com/docker-library/python/3dd565218e1007919dec280b5729bd5ddb780345/3.6/stretch/Dockerfile
 # except the src dir has been kept
