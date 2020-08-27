@@ -167,6 +167,7 @@ RUN apt-get update && apt-get install --assume-yes libssl-dev libsqlite3-dev lib
 
 # All of this is taken from: https://raw.githubusercontent.com/docker-library/python/3dd565218e1007919dec280b5729bd5ddb780345/3.6/stretch/Dockerfile
 # except the src dir has been kept
+# ...and the symlink for python has been kept (not replaced with this one)
 
 # extra dependencies (over what buildpack-deps already includes)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -255,7 +256,6 @@ RUN set -ex \
 RUN cd /usr/local/bin \
 	&& ln -s idle3 idle \
 	&& ln -s pydoc3 pydoc \
-	&& ln -s python3 python \
 	&& ln -s python3-config python-config
 
 # if this is called "PIP_VERSION", pip explodes with "ValueError: invalid truth value '<VERSION>'"
