@@ -168,6 +168,7 @@ RUN apt-get update && apt-get install --assume-yes libssl-dev libsqlite3-dev lib
 # All of this is taken from: https://raw.githubusercontent.com/docker-library/python/3dd565218e1007919dec280b5729bd5ddb780345/3.6/stretch/Dockerfile
 # except the src dir has been kept
 # ...and the symlink for python has been kept (not replaced with this one)
+# ...and install pip with python3.6
 
 # extra dependencies (over what buildpack-deps already includes)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -269,7 +270,7 @@ RUN set -ex; \
 	wget -O get-pip.py "$PYTHON_GET_PIP_URL"; \
 	echo "$PYTHON_GET_PIP_SHA256 *get-pip.py" | sha256sum --check --strict -; \
 	\
-	python get-pip.py \
+	python3.6 get-pip.py \
 		--disable-pip-version-check \
 		--no-cache-dir \
 		"pip==$PYTHON_PIP_VERSION" \
