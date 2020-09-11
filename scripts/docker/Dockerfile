@@ -1,17 +1,141 @@
-#
-# NOTE: THIS DOCKERFILE IS GENERATED VIA "update.sh"
-#
-# PLEASE DO NOT EDIT IT DIRECTLY.
-#
+## LAYER base OS
+FROM debian:9.11 as os-base
 
-FROM buildpack-deps:buster
+RUN rm /bin/sh && ln -s /bin/bash /bin/sh
+SHELL ["/bin/bash", "-c"]
 
-# ensure local python is preferred over distribution python
-ENV PATH /usr/local/bin:$PATH
+# Enable contributor package sources
+ENV DEBIAN_FRONTEND=noninteractive
+RUN sed -i 's/stretch main/stretch main contrib/' /etc/apt/sources.list
+RUN apt-get update && apt-get install --assume-yes apt-utils
 
-# http://bugs.python.org/issue19846
-# > At the moment, setting "LANG=C" on a Linux system *fundamentally breaks Python 3*, and that's not OK.
-ENV LANG C.UTF-8
+# General build niceties
+RUN apt-get update && apt-get install --assume-yes \
+	binutils \
+	bvi \
+	bzip2 \
+	coreutils \
+	git \
+	python3 \
+	rsync \
+	strace \
+	sudo \
+	tree \
+	unzip \
+	vim \
+	wget \
+	xz-utils \
+	zip \
+""
+
+# Install nibuild dependencies
+RUN dpkg --add-architecture i386
+RUN apt-get update && apt-get install --assume-yes \
+	libc6-i686:i386 \
+	libperl5.24:i386 \
+	libstdc++6:i386 \
+""
+RUN apt-get update && apt-get install --assume-yes \
+	build-essential \
+	ccache \
+	chrpath \
+	cvs \
+	desktop-file-utils \
+	diffstat \
+	g++ \
+	gawk \
+	help2man \
+	info \
+	libpulse-dev \
+	pkg-config \
+	subversion \
+	texi2html \
+	texinfo \
+	xmlstarlet \
+""
+
+# Install UTF-8 locales
+RUN apt-get update && apt-get install --assume-yes locales
+RUN dpkg-reconfigure -f noninteractive locales
+RUN echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && locale-gen en_US.UTF-8
+RUN update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8'
+
+
+## LAYER build env
+FROM os-base as nilrt-build
+
+# Install OE dependencies
+RUN apt-get update && apt-get install --assume-yes \
+	bc \
+	build-essential \
+	ccache \
+	chrpath \
+	cpio \
+	cvs \
+	debianutils \
+	desktop-file-utils \
+	diffstat \
+	gawk \
+	gcc-multilib \
+	gdb \
+	genisoimage \
+	git-core \
+	gnupg2 \
+	help2man \
+	info \
+	iputils-ping \
+	libc6-dbg \
+	libegl1-mesa \
+	libguestfs0-dbg \
+	libguestfs-tools \
+	libpulse-dev \
+	libsdl1.2-dev \
+	linux-image-amd64 \
+	pigz \
+	pkg-config \
+	pylint3 \
+	python \
+	python-pexpect \
+	python3 \
+	python3-git \
+	python3-jinja2 \
+	python3-pip \
+	python3-pexpect \
+	qemu-kvm \
+	qemu-system-x86 \
+	qemu-utils \
+	socat \
+	strace \
+	subversion \
+	texi2html \
+	texinfo \
+	unzip \
+	uuid-runtime \
+	wget \
+	xmlstarlet \
+	xterm \
+	xz-utils \
+""
+
+# Cleanup image of unneeded packages to reduce size
+RUN apt-get autoremove --yes && apt-get clean --yes
+RUN rm -rf \
+	/tmp/* \
+	/var/cache/apt/*.bin \
+	/var/cache/apt/archives/*.deb \
+	/var/cache/apt/archives/partial/*.deb \
+	/var/lib/apt/lists/* \
+	/var/tmp/* \
+""
+
+# Add things the the Python 3.6 compile needs
+RUN apt-get update && apt-get install --assume-yes libssl-dev libsqlite3-dev libncurses5-dev liblzma-dev
+
+# All of this is taken from: https://raw.githubusercontent.com/docker-library/python/3dd565218e1007919dec280b5729bd5ddb780345/3.6/stretch/Dockerfile
+# except the src dir has been kept
+# ...and the symlink for python has been kept (not replaced with this one)
+# ...and install pip with python3.6
 
 # extra dependencies (over what buildpack-deps already includes)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -84,7 +208,6 @@ RUN set -ex \
 			test_unicode \
 		' \
 	&& make install \
-	&& rm -rf /usr/src/python \
 	\
 	&& find /usr/local -depth \
 		\( \
@@ -101,7 +224,6 @@ RUN set -ex \
 RUN cd /usr/local/bin \
 	&& ln -s idle3 idle \
 	&& ln -s pydoc3 pydoc \
-	&& ln -s python3 python \
 	&& ln -s python3-config python-config
 
 # if this is called "PIP_VERSION", pip explodes with "ValueError: invalid truth value '<VERSION>'"
@@ -115,7 +237,7 @@ RUN set -ex; \
 	wget -O get-pip.py "$PYTHON_GET_PIP_URL"; \
 	echo "$PYTHON_GET_PIP_SHA256 *get-pip.py" | sha256sum --check --strict -; \
 	\
-	python get-pip.py \
+	python3.6 get-pip.py \
 		--disable-pip-version-check \
 		--no-cache-dir \
 		"pip==$PYTHON_PIP_VERSION" \
@@ -130,101 +252,8 @@ RUN set -ex; \
 		\) -exec rm -rf '{}' +; \
 	rm -f get-pip.py
 
-# Everything above here comes from a Python docker build
-# Everything below here come from the existing Dockerfile
-RUN rm /bin/sh && ln -s /bin/bash /bin/sh
 
-# Leave this out until we need some of these things
-# RUN sed -i 's/stretch main/stretch main contrib/' /etc/apt/sources.list
+# Install the perforce cli binary
+COPY build-scripts/install-p4-cli.sh /tmp/install-p4-cli.sh
+RUN  /tmp/install-p4-cli.sh
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update && apt-get install --assume-yes apt-utils
-
-# Install OE dependencies
-RUN apt-get update && apt-get install --assume-yes \
-	bc \
-	build-essential \
-	ccache \
-	chrpath \
-	cpio \
-	cvs \
-	desktop-file-utils \
-	diffstat \
-	gawk \
-	gcc-multilib \
-	gdb \
-	genisoimage \
-	git-core \
-	gnupg2 \
-	help2man \
-	info \
-	iputils-ping \
-	libc6-dbg \
-	libguestfs-tools \
-	libpulse-dev \
-	libsdl1.2-dev \
-	linux-image-amd64 \
-	locales \
-	pigz \
-	pkg-config \
-	qemu-kvm \
-	qemu-system-x86 \
-	qemu-utils \
-	rsync \
-	socat \
-	strace \
-	subversion \
-	sudo \
-	texi2html \
-	texinfo \
-	unzip \
-	uuid-runtime \
-	vim \
-	wget \
-	xmlstarlet \
-	zip
-
-# Install virtualbox from upstream because it's not available in debian 9
-# RUN echo 'deb http://download.virtualbox.org/virtualbox/debian stretch contrib' > /etc/apt/sources.list.d/virtualbox.list
-# RUN wget https://www.virtualbox.org/download/oracle_vbox_2016.asc
-# RUN apt-key add oracle_vbox_2016.asc
-# RUN rm oracle_vbox_2016.asc
-# RUN apt-get update && apt-get install --assume-yes virtualbox-6.0
-
-RUN dpkg-reconfigure -f noninteractive locales
-RUN echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen && locale-gen en_US.UTF-8
-RUN update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
-
-# Cleanup image of unneeded packages to reduce size
-
-RUN apt-get autoremove --yes && apt-get clean --yes
-RUN rm -rf \
-	/tmp/* \
-	/var/lib/apt/lists/* \
-	/var/tmp/*
-RUN rm -f \
-	/var/cache/apt/*.bin \
-	/var/cache/apt/archives/*.deb \
-	/var/cache/apt/archives/partial/*.deb
-
-ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8'
-
-# Remove this since it's really large 
-COPY agent.tar.gz /agent.tar.gz
-
-RUN cd /srv && tar xvfz ../agent.tar.gz
-
-RUN rm /usr/bin/python3
-RUN rm /usr/local/bin/python3
-COPY python3.in /usr/local/bin/python3 
-RUN chmod a+x /usr/local/bin/python3
-
-COPY p4 /usr/local/bin/p4
-
-# Just add a play user account for now
-RUN useradd jminor
-RUN mkdir -p /home/jminor
-RUN chown jminor:jminor /home/jminor
-
-# Missing some p4 auth stuff
