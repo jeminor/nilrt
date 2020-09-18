@@ -18,4 +18,6 @@ jobs:
   steps:
   - script: |
       export MACHINE=x64
+      echo "We are at:"
+      pwd
       source ni-oe-init-build-env
