@@ -16,6 +16,6 @@ jobs:
       - docker
       - Agent.OS -equals Linux
   steps:
-    - script: |
+  - script: |
       export MACHINE=x64
       source ni-oe-init-build-env
