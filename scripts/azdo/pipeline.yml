@@ -8,7 +8,7 @@ resources:
     options:
 
 jobs:
-- job: Build OpenEmbedded
+- job: Build_OpenEmbedded
   container: rtos-build
   pool:
     name: Drivers-NIBuildFarm-RFMIBUILD
