@@ -23,3 +23,7 @@ jobs:
       echo "We are at:"
       pwd
       source ni-oe-init-build-env
+      bitbake packagegroup-ni-coreimagerepo
+      bitbake --continue packagegroup-ni-extra
+      bitbake package-index
+      bitbake restore-mode-image
