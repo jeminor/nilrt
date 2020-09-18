@@ -45,7 +45,7 @@
 [submodule "sources/meta-sdr"]
 	path = sources/meta-sdr
 	url = https://github.com/ni/meta-sdr.git
-	branch = nilrt/master/dunfell
+	branch = nilrt/master/blhblh
 [submodule "sources/meta-java"]
 	path = sources/meta-java
 	url = https://github.com/ni/meta-java.git
