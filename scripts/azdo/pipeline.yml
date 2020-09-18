@@ -16,6 +16,8 @@ jobs:
       - docker
       - Agent.OS -equals Linux
   steps:
+  - checkout: self
+    submodules: true
   - script: |
       export MACHINE=x64
       echo "We are at:"
