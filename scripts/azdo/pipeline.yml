@@ -1,0 +1,21 @@
+trigger:
+- dev/jminor/azdobuild
+
+resources:
+  containers:
+  - container: rtos-build
+    image: rnd-builds.repos.natinst.com/rtos/nilrt-build:0.3
+    options:
+
+jobs:
+- job: Build OpenEmbedded
+  container: rtos-build
+  pool:
+    name: Drivers-NIBuildFarm-RFMIBUILD
+    demands:
+      - docker
+      - Agent.OS -equals Linux
+  steps:
+    - script: |
+      export MACHINE=x64
+      source ni-oe-init-build-env
