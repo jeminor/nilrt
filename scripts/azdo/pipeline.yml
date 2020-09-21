@@ -1,5 +1,5 @@
 trigger:
-- dev/jminor/azdobuild
+- nilrt/master/*
 
 resources:
   containers:
@@ -10,6 +10,7 @@ resources:
 jobs:
 - job: Build_OpenEmbedded
   container: rtos-build
+  timeoutInMinutes: 3600
   pool:
     name: Drivers-NIBuildFarm-RFMIBUILD
     demands:
@@ -20,8 +21,6 @@ jobs:
     submodules: true
   - script: |
       export MACHINE=x64
-      echo "We are at:"
-      pwd
       source ni-oe-init-build-env
       bitbake packagegroup-ni-coreimagerepo
       bitbake --continue packagegroup-ni-extra
