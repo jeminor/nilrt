@@ -1,0 +1,16 @@
+# docker-compose.yml
+version: '3'
+services:
+  oebuild:
+    image: 1ff207fc7bfd
+    user: $UID:$GID
+    stdin_open: true
+    volumes:
+      - /etc/group:/etc/group:ro
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/shadow:/etc/shadow:ro
+      - /mnt/nvm1/home/jminor/git_repos:/mnt/nvm1/home/jminor/git_repos
+      - /home/jminor:/home/jminor
+    tty: true
+    command: /bin/bash
+
