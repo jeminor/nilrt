@@ -2,7 +2,9 @@
 version: '3'
 services:
   oebuild:
-    image: 1ff207fc7bfd
+    build:
+      context: ./
+      dockerfile: Dockerfile
     user: $UID:$GID
     stdin_open: true
     volumes:
